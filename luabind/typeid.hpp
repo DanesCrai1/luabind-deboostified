@@ -6,6 +6,7 @@
 # define LUABIND_TYPEID_081227_HPP
 
 # include <typeinfo>
+# include <cstring>
 # include <luabind/detail/type_traits.hpp>
 
 namespace luabind {
@@ -33,7 +34,14 @@ namespace luabind {
 
 		bool operator<(type_id const& other) const
 		{
-			return id->before(*other.id);
+			// [DA_PORT] std::type_info::before() is inconsistent under MinGW x64
+			// across DLL boundaries / with LTO. Use name() string comparison for stability.
+			const char* a = id->name();
+			const char* b = other.id->name();
+			if (a == b) return false;
+			if (!a) return true;
+			if (!b) return false;
+			return std::strcmp(a, b) < 0;
 		}
 
 		size_t hash_code() const

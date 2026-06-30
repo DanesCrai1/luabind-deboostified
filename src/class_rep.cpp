@@ -63,6 +63,13 @@ luabind::detail::class_rep::class_rep(type_id const& type
 
 
 void luabind::detail::class_rep::shared_init(lua_State * L) {
+	// [DA_PORT] trace
+	{
+		#include <cstdio>
+		static FILE* dbgf = nullptr;
+		if (!dbgf) dbgf = std::fopen("da_port_classrep.log", "a");
+		if (dbgf) { std::fprintf(dbgf, "! [DA_PORT] shared_init: name=%s L=%p\n", m_name, (void*)L); std::fflush(dbgf); }
+	}
 	lua_newtable(L);
 	handle(L, -1).swap(m_table);
 	lua_newtable(L);
@@ -73,6 +80,12 @@ void luabind::detail::class_rep::shared_init(lua_State * L) {
 	// the following line should be equivalent whether or not this is a cpp class
 	assert((r->cpp_class() != LUA_NOREF) && "you must call luabind::open()");
 
+	{
+		#include <cstdio>
+		static FILE* dbgf = nullptr;
+		if (!dbgf) dbgf = std::fopen("da_port_classrep.log", "a");
+		if (dbgf) { std::fprintf(dbgf, "! [DA_PORT] shared_init: %s before lua_rawgeti cpp_class\n", m_name); std::fflush(dbgf); }
+	}
 	lua_rawgeti(L, LUA_REGISTRYINDEX, (m_class_type == cpp_class) ? r->cpp_class() : r->lua_class());
 	lua_setmetatable(L, -2);
 
@@ -81,6 +94,12 @@ void luabind::detail::class_rep::shared_init(lua_State * L) {
 
 	m_instance_metatable = (m_class_type == cpp_class) ? r->cpp_instance() : r->lua_instance();
 
+	{
+		#include <cstdio>
+		static FILE* dbgf = nullptr;
+		if (!dbgf) dbgf = std::fopen("da_port_classrep.log", "a");
+		if (dbgf) { std::fprintf(dbgf, "! [DA_PORT] shared_init: %s before cast_graph\n", m_name); std::fflush(dbgf); }
+	}
 	lua_pushstring(L, "__luabind_cast_graph");
 	lua_gettable(L, LUA_REGISTRYINDEX);
 	m_casts = static_cast<cast_graph*>(lua_touserdata(L, -1));
@@ -91,6 +110,12 @@ void luabind::detail::class_rep::shared_init(lua_State * L) {
 	m_classes = static_cast<class_id_map*>(lua_touserdata(L, -1));
 	lua_pop(L, 1);
 
+	{
+		#include <cstdio>
+		static FILE* dbgf = nullptr;
+		if (!dbgf) dbgf = std::fopen("da_port_classrep.log", "a");
+		if (dbgf) { std::fprintf(dbgf, "! [DA_PORT] shared_init: %s DONE\n", m_name); std::fflush(dbgf); }
+	}
 }
 
 luabind::detail::class_rep::class_rep(lua_State* L, const char* name)

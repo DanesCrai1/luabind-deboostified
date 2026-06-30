@@ -32,6 +32,21 @@
 #include <cstring>
 #include <iostream>
 
+// [DA_PORT] trace helpers - write to stderr/file
+#include <cstdio>
+namespace DA_PORT {
+    void Msg(const char* s) {
+        static FILE* f = nullptr;
+        if (!f) f = std::fopen("da_port_luabind.log", "a");
+        if (f) { std::fputs(s, f); std::fflush(f); }
+    }
+    void FlushLog() {
+        static FILE* f = nullptr;
+        if (!f) f = std::fopen("da_port_luabind.log", "a");
+        if (f) std::fflush(f);
+    }
+}
+
 namespace
 {
     bool custom_type_marking_disabled = false;
@@ -98,6 +113,14 @@ namespace luabind {
 
 			assert(lua_type(L, -1) == LUA_TTABLE);
 
+			// [DA_PORT] trace
+			{
+				DA_PORT::Msg("! [DA_PORT] class_registration::register_: name=");
+				DA_PORT::Msg(m_name);
+				DA_PORT::Msg("\n");
+				DA_PORT::FlushLog();
+			}
+
 			lua_pushstring(L, m_name);
 
 			detail::class_rep* crep;
@@ -118,9 +141,11 @@ namespace luabind {
 				, m_name
 				, L
 			);
+			DA_PORT::Msg("! [DA_PORT] class_rep created for "); DA_PORT::Msg(m_name); DA_PORT::Msg("\n"); DA_PORT::FlushLog();
 
 			// register this new type in the class registry
 			r->add_class(m_type, crep);
+			DA_PORT::Msg("! [DA_PORT] add_class done for "); DA_PORT::Msg(m_name); DA_PORT::Msg("\n"); DA_PORT::FlushLog();
 
 			lua_pushstring(L, "__luabind_class_map");
 			lua_rawget(L, LUA_REGISTRYINDEX);
@@ -129,6 +154,7 @@ namespace luabind {
 			lua_pop(L, 1);
 
 			classes.put(m_id, crep);
+			DA_PORT::Msg("! [DA_PORT] classes.put done for "); DA_PORT::Msg(m_name); DA_PORT::Msg("\n"); DA_PORT::FlushLog();
 
 			bool const has_wrapper = m_wrapper_id != registered_class<null_type>::id;
 
@@ -140,14 +166,19 @@ namespace luabind {
 			detail::class_registry* registry = detail::class_registry::get_registry(L);
 
 			crep->get_default_table(L);
+			DA_PORT::Msg("! [DA_PORT] get_default_table done for "); DA_PORT::Msg(m_name); DA_PORT::Msg("\n"); DA_PORT::FlushLog();
 			m_scope.register_(L);
+			DA_PORT::Msg("! [DA_PORT] m_scope.register_ done for "); DA_PORT::Msg(m_name); DA_PORT::Msg("\n"); DA_PORT::FlushLog();
 			m_default_members.register_(L, true);
+			DA_PORT::Msg("! [DA_PORT] m_default_members.register_ done for "); DA_PORT::Msg(m_name); DA_PORT::Msg("\n"); DA_PORT::FlushLog();
 			lua_pop(L, 1);
 
 			crep->get_table(L);
 			m_members.register_(L);
+			DA_PORT::Msg("! [DA_PORT] m_members.register_ done for "); DA_PORT::Msg(m_name); DA_PORT::Msg("\n"); DA_PORT::FlushLog();
 			lua_pop(L, 1);
 
+			DA_PORT::Msg("! [DA_PORT] before cast_graph for "); DA_PORT::Msg(m_name); DA_PORT::Msg("\n"); DA_PORT::FlushLog();
 			lua_pushstring(L, "__luabind_cast_graph");
 			lua_gettable(L, LUA_REGISTRYINDEX);
 			cast_graph* const casts = static_cast<cast_graph*>(lua_touserdata(L, -1));
@@ -159,6 +190,7 @@ namespace luabind {
 			lua_pop(L, 1);
 
 			class_ids->put(m_id, m_type);
+			DA_PORT::Msg("! [DA_PORT] class_ids.put done for "); DA_PORT::Msg(m_name); DA_PORT::Msg("\n"); DA_PORT::FlushLog();
 
 			if(has_wrapper) {
 				class_ids->put(m_wrapper_id, m_wrapper_type);
@@ -167,12 +199,19 @@ namespace luabind {
 			for(auto const& e : m_casts) {
 				casts->insert(e.src, e.target, e.cast);
 			}
+			DA_PORT::Msg("! [DA_PORT] casts.insert done for "); DA_PORT::Msg(m_name); DA_PORT::Msg("\n"); DA_PORT::FlushLog();
 
 			for(const auto& base_pair : m_bases) {
 				LUABIND_CHECK_STACK(L);
 
+				DA_PORT::Msg("! [DA_PORT] processing base for "); DA_PORT::Msg(m_name); DA_PORT::Msg("\n"); DA_PORT::FlushLog();
+
 				// the baseclass' class_rep structure
 				detail::class_rep* bcrep = registry->find_class(base_pair.first);
+				DA_PORT::Msg("! [DA_PORT] find_class returned "); DA_PORT::Msg(bcrep ? "OK" : "NULL"); DA_PORT::Msg("\n"); DA_PORT::FlushLog();
+				if (!bcrep) {
+					DA_PORT::Msg("! [DA_PORT] FATAL: base class not found for "); DA_PORT::Msg(m_name); DA_PORT::Msg("\n"); DA_PORT::FlushLog();
+				}
 
 				detail::class_rep::base_info base;
 				base.pointer_offset = 0;
