@@ -8,6 +8,10 @@
 # include <luabind/detail/inheritance.hpp>
 # include <luabind/detail/object_rep.hpp>
 
+extern "C" LUABIND_API void da_ptr_note(const void* p);
+extern "C" LUABIND_API int da_cache_push(lua_State* L, const void* cls, const char* name, const void* p);
+extern "C" LUABIND_API void da_cache_store(lua_State* L, const void* cls, const char* name, const void* p);
+
 namespace luabind {
 	namespace detail {
 
@@ -72,6 +76,15 @@ namespace luabind {
 				throw unresolved_name("Trying to use unregistered class", typeid(P).name());
 			}
 
+			// [DA_PORT] Сколько РАЗНЫХ объектов оборачивается против общего числа обёрток. Без
+			// этого числа кэш обёрток строить нельзя: если каждый объект оборачивают по разу,
+			// кэшировать нечего, и вся возня с временем жизни ссылки окажется впустую.
+			const void* da_raw = static_cast<const void*>(get_pointer(p));
+			da_ptr_note(da_raw);
+			// [DA_PORT] Готовая обёртка, если этот класс разрешён к кэшированию.
+			if (da_cache_push(L, cls, cls ? cls->name() : 0, da_raw))
+				return;
+
 			object_rep* instance = push_new_instance(L, cls);
 
 			using value_type = typename std::remove_reference<P>::type;
@@ -91,6 +104,8 @@ namespace luabind {
 			}
 
 			instance->set_instance(static_cast<holder_type*>(storage));
+			// Запоминаем ТОЛЬКО собранную до конца обёртку, иначе кэш отдал бы полуфабрикат.
+			da_cache_store(L, cls, cls ? cls->name() : 0, da_raw);
 		}
 
 

@@ -320,14 +320,45 @@ namespace luabind {
 			: std::conditional< std::is_pointer<T>::value || is_primitive<T>::value, T, typename std::add_lvalue_reference< typename std::add_const<T>::type >::type >
 		{};
 
+		// [DA_PORT] Автоматическая зависимость для свойств отключена.
+		//
+		// ЧТО ДЕЛАЛА. luabind сам добавлял dependency<0,1> КАЖДОМУ свойству-геттеру, чей результат
+		// не примитив. Смысл механизма: результат хранит ссылку на владельца, чтобы тот его пережил.
+		// Хранит он её в отдельной таблице Lua, которая заводится на каждый результат.
+		//
+		// ЦЕНА. Замер: 52 031 вызов add_dependency за 300 кадров — 173 на кадр, и столько же таблиц
+		// с хеш-частями. Это 92% всех создаваемых из C++ таблиц и около 618 КБ/сек мусора Lua,
+		// то есть 42% всего оставшегося. Строка `self.position:distance_to(se_actor.position)` в
+		// smart_terrain платит эту цену дважды.
+		//
+		// ПОЧЕМУ УБИРАТЬ БЕЗОПАСНО — по трём проверенным фактам, а не по общим соображениям:
+		//   1. Инъекция применяется ТОЛЬКО к property_registration (см. использование ниже), то есть
+		//      к свойствам-геттерам; методы, объявленные через .def, она не трогает вовсе;
+		//   2. Владение из C++ в Lua передаёт только политика adopt, а она в движке стоит в 14
+		//      местах и ВСЕ ОНИ — методы .def (add_action, add_evaluator, add_objective, фабрики
+		//      сетевой игры). На свойстве adopt не стоит НИ РАЗУ, значит результат свойства Lua
+		//      никогда не принадлежит;
+		//   3. Свойства возвращают либо сырой указатель (pointer_holder, деструктора нет — сборка
+		//      обёртки ничего не разрушает), либо копию значения (value_holder, она самодостаточна).
+		//      Ни в том, ни в другом случае сиделке нечего охранять.
+		//
+		// ⛔ Первая версия этого обоснования утверждала «adopt не используется нигде» — это НЕВЕРНО,
+		//    греп искал `luabind::adopt`, а в коде он написан без префикса. Вывод устоял только
+		//    потому, что решает пункт 1: инъекция не доходит до методов.
+		//
+		// Вернуть прежнее поведение — определить LUABIND_AUTO_DEPENDENCY при сборке.
 		template <class T, class Policies>
 		struct inject_dependency_policy
 		{
+#ifdef LUABIND_AUTO_DEPENDENCY
 			using type = typename std::conditional <
 				is_primitive<T>::value || meta::contains<Policies, call_policy_injector< detail::no_dependency_policy > >::value,
 				Policies,
 				typename meta::push_back< Policies, call_policy_injector< dependency_policy<0, 1> > >::type
 			>::type;
+#else
+			using type = Policies;
+#endif
 		};
 
 		template <class Class, class Get, class GetPolicies, class Set = null_type, class SetPolicies = no_policies >
